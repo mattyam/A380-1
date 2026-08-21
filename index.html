@@ -64,6 +64,11 @@ body::-webkit-scrollbar {
   transition: transform 0.35s cubic-bezier(.2, .9, .2, 1);
   will-change: transform;
   touch-action: pan-y;
+  cursor: grab;
+}
+
+.track:active {
+  cursor: grabbing;
 }
 
 .slide {
@@ -85,45 +90,56 @@ body::-webkit-scrollbar {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  pointer-events: none;
+
+  /* Allows the browser image context menu */
+  pointer-events: auto;
+
   user-select: none;
   -webkit-user-drag: none;
 }
 
 /* Navigation */
 
-.btn {
+.btn,
+.fullscreen-btn {
   position: absolute;
-  top: 50%;
   z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--button-size);
-  height: var(--button-size);
   padding: 0;
-  transform: translateY(-50%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 50%;
   background: rgba(5, 10, 30, 0.68);
   box-shadow: 0 6px 18px rgba(2, 6, 23, 0.45);
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   cursor: pointer;
 }
 
-.btn:hover {
+.btn:hover,
+.fullscreen-btn:hover {
   background: rgba(5, 10, 30, 0.85);
 }
 
-.btn:focus-visible {
+.btn:focus-visible,
+.fullscreen-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
-.btn svg {
+.btn svg,
+.fullscreen-btn svg {
   width: 20px;
   height: 20px;
   fill: #fff;
+}
+
+.btn {
+  top: 50%;
+  width: var(--button-size);
+  height: var(--button-size);
+  transform: translateY(-50%);
 }
 
 .btn.left {
@@ -134,7 +150,43 @@ body::-webkit-scrollbar {
   right: 18px;
 }
 
-/* Dots sit on top of the image */
+/* Fullscreen button */
+
+.fullscreen-btn {
+  top: 18px;
+  right: 18px;
+  width: 42px;
+  height: 42px;
+  z-index: 30;
+}
+
+.fullscreen-btn .exit-icon {
+  display: none;
+}
+
+.fullscreen-btn.is-fullscreen .enter-icon {
+  display: none;
+}
+
+.fullscreen-btn.is-fullscreen .exit-icon {
+  display: block;
+}
+
+/* Fullscreen appearance */
+
+.carousel:fullscreen,
+.carousel:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+.carousel:fullscreen .slide-inner img,
+.carousel:-webkit-full-screen .slide-inner img {
+  object-fit: contain;
+}
+
+/* Dots */
 
 .dots {
   position: absolute;
@@ -174,6 +226,13 @@ body::-webkit-scrollbar {
     right: 10px;
   }
 
+  .fullscreen-btn {
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+  }
+
   .dots {
     bottom: 10px;
   }
@@ -205,6 +264,22 @@ body::-webkit-scrollbar {
       </svg>
     </button>
 
+    <button
+      class="fullscreen-btn"
+      id="fullscreenBtn"
+      type="button"
+      aria-label="Enter fullscreen"
+      title="Enter fullscreen"
+    >
+      <svg class="enter-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"></path>
+      </svg>
+
+      <svg class="exit-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"></path>
+      </svg>
+    </button>
+
     <div id="dots" class="dots"></div>
   </div>
 </div>
@@ -220,6 +295,7 @@ const carousel = document.getElementById("carousel");
 const track = document.getElementById("track");
 const prevBtn = document.getElementById("prevBtn");
 const nextBtn = document.getElementById("nextBtn");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
 const dotsWrap = document.getElementById("dots");
 
 let index = 1;
@@ -230,6 +306,10 @@ let dragging = false;
 let startX = 0;
 let dragOffset = 0;
 let pointerId = null;
+
+function getActiveImageIndex() {
+  return (index - 1 + images.length) % images.length;
+}
 
 function makeSlide(src, imageIndex, clone = false) {
   const slide = document.createElement("div");
@@ -321,8 +401,7 @@ function finishTransition() {
 }
 
 function updateDots() {
-  const activeIndex =
-    (index - 1 + images.length) % images.length;
+  const activeIndex = getActiveImageIndex();
 
   Array.from(dotsWrap.children).forEach((dot, dotIndex) => {
     const active = dotIndex === activeIndex;
@@ -356,10 +435,90 @@ carousel.addEventListener("keydown", event => {
   }
 });
 
+/* Fullscreen */
+
+async function toggleFullscreen() {
+  const fullscreenElement =
+    document.fullscreenElement ||
+    document.webkitFullscreenElement;
+
+  if (fullscreenElement) {
+    if (document.exitFullscreen) {
+      await document.exitFullscreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+
+    return;
+  }
+
+  const fullscreenEnabled =
+    document.fullscreenEnabled ??
+    document.webkitFullscreenEnabled ??
+    true;
+
+  /*
+   * Some embedded viewers do not allow fullscreen.
+   * In that case, open the current image in a new tab.
+   */
+  if (!fullscreenEnabled) {
+    window.open(
+      images[getActiveImageIndex()],
+      "_blank",
+      "noopener,noreferrer"
+    );
+    return;
+  }
+
+  try {
+    if (carousel.requestFullscreen) {
+      await carousel.requestFullscreen();
+    } else if (carousel.webkitRequestFullscreen) {
+      carousel.webkitRequestFullscreen();
+    }
+  } catch (error) {
+    window.open(
+      images[getActiveImageIndex()],
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+}
+
+function updateFullscreenButton() {
+  const fullscreenActive = Boolean(
+    document.fullscreenElement ||
+    document.webkitFullscreenElement
+  );
+
+  fullscreenBtn.classList.toggle("is-fullscreen", fullscreenActive);
+  fullscreenBtn.setAttribute(
+    "aria-label",
+    fullscreenActive ? "Exit fullscreen" : "Enter fullscreen"
+  );
+  fullscreenBtn.title =
+    fullscreenActive ? "Exit fullscreen" : "Enter fullscreen";
+
+  requestAnimationFrame(() => setPosition(false));
+}
+
+fullscreenBtn.addEventListener("click", toggleFullscreen);
+
+document.addEventListener("fullscreenchange", updateFullscreenButton);
+document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+
 /* Mouse and touch dragging */
 
 track.addEventListener("pointerdown", event => {
   if (moving) return;
+
+  /*
+   * Only begin dragging with the primary mouse button.
+   * This leaves right-click available on each image.
+   */
+  if (event.pointerType === "mouse" && event.button !== 0) {
+    return;
+  }
 
   dragging = true;
   startX = event.clientX;
